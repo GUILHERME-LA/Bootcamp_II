@@ -1,0 +1,22 @@
+{
+    "manifest_version": 3,
+    "name": "Olá, mundo",
+    "version": "0.1.1",
+    "description":"Minha primeira extensao",
+    "action":{
+        "default_popup":"popup.html",
+        "default_title": "Diga olá",
+        "default_icon":{
+            "16":"img/Icon.png",
+            "48":"img/Icon.png",
+            "128":"img/Icon.png"
+        },  
+    "icons":{
+           "16":"img/Icon.png",
+            "48":"img/Icon.png",
+            "128":"img/Icon.png"
+    } 
+            
+    }
+
+}
