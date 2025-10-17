@@ -4,16 +4,20 @@
   "version": "1.0",
   "description": "Lembra de beber água a cada X minutos durante os estudos.",
   "permissions": ["storage", "notifications", "alarms"],
+  
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "src/popup/popup.html", 
     "default_title": "Lembrete de Água"
   },
+  
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "src/background/background.js"  
   },
+  
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
+    
   }
 }

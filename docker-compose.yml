@@ -1,0 +1,15 @@
+services:
+  e2e:
+    build: .
+    image: bootcamp/ext-e2e:latest
+    environment:
+      # Define CI=true para forçar o comportamento de CI se necessário
+      - CI=true
+    volumes:
+      # Monta o diretório atual para que o relatório do Playwright (playwright-report)
+      # e a pasta dist/ (para rebuilds locais) sejam acessíveis fora do container
+      - ./:/app
+    working_dir: /app
+    # Executa o script de teste definido no package.json
+    command: npm run test:e2e
+    shm_size: 2gb  # Recomendado para evitar falhas do Chromium por falta de shared memory

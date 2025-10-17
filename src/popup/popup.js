@@ -42,17 +42,21 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   });
-  
-  // Botão Parar
-  btnParar.addEventListener('click', () => {
-    chrome.alarms.clear('lembreteAgua', (foiLimpo) => {
-      if (foiLimpo) {
-        atualizarStatus(false, 0);
-        btnIniciar.disabled = false;
-        btnParar.disabled = true;
-      }
-    });
+btnParar.addEventListener('click', () => {
+  // Envia a mensagem para background.js para limpar o alarme
+  chrome.runtime.sendMessage({
+    acao: 'pararAlarme' // Ação definida no background.js
+  }, (resposta) => {
+    // O Service Worker (background.js) responde com status: 'parado'
+    if (resposta && resposta.status === 'parado') {
+      // Limpa o valor salvo para que o status inicie Parado
+      chrome.storage.sync.remove('intervalo'); 
+      atualizarStatus(false, 0);
+      btnIniciar.disabled = false;
+      btnParar.disabled = true;
+    }
   });
+});
   
   // Inicializa status (verifica se alarme está ativo)
   chrome.alarms.get('lembreteAgua', (alarme) => {
