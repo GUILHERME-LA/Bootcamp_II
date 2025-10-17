@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build-extension.mjs",
-    "test:e2e": "playwright test --reporter=list,html",
+    "test:e2e": "playwright test --reporter=list,html --host 0.0.0.0 --port 9324",
     "test": "npm run build && npm run test:e2e",
     "ci": "npm ci && npm run test"
   },

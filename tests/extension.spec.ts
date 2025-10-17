@@ -1,101 +1,77 @@
-import { test, expect } from '@playwright/test';
-import path from 'node:path';
+import { test, expect, BrowserContext } from '@playwright/test';
 
-const dist = path.resolve(__dirname, '..', 'dist');
+// O teste agora aceita 'context' diretamente na função, que será o contexto da extensão
+// conforme configurado no playwright.config.ts.
+test('Deve configurar e parar o lembrete de água corretamente', async ({ context }) => {
+    
+    // O Playwright garante que 'context' é o BrowserContext que carrega a extensão.
+    let extensionId: string | null = null;
+    
+    try {
+        // 1. Aguarda o Service Worker da extensão carregar
+        // Aumentando o timeout para 80 segundos para acomodar ambientes de CI/Docker lentos.
+        const serviceWorker = await context.waitForEvent('serviceworker', { timeout: 80000 });
+        
+        // 2. Obtém o ID da extensão a partir da URL do Service Worker
+        const url = serviceWorker.url();
+        const match = url.match(/^chrome-extension:\/\/(.+)\//);
+        
+        if (!match || !match[1]) {
+             throw new Error(`Não foi possível extrair o ID da extensão do URL do Service Worker: ${url}`);
+        }
+        
+        extensionId = match[1];
 
-// Função utilitária para obter a URL do service worker
-async function getExtensionServiceWorkerURL(page) {
-    // Esta URL pode ser diferente dependendo do ambiente/versão do Chrome
-    await page.goto('chrome://extensions/');
-    // Usa uma função de avaliação para encontrar o ID da extensão e a URL do service worker
-    const serviceWorkerUrl = await page.evaluate(async (extensionName) => {
-        // Encontra o card da extensão pelo nome
-        const extensionCard = Array.from(document.querySelectorAll('extensions-item'))
-            .find(item => item.shadowRoot.querySelector('#name').textContent.includes(extensionName));
-        
-        if (extensionCard) {
-            // Obtém o ID da extensão
-            const extensionId = extensionCard.getAttribute('id');
-            // A URL do service worker usa o ID
-            return `chrome-extension://${extensionId}/_generated_background_page.html`;
-        }
-        return null;
-    }, 'Lembrete de Água para Estudos'); // Nome do manifest.json
+    } catch (e) {
+        // Captura o erro, seja timeout ou falha na extração do ID.
+        throw new Error(`Falha ao carregar o Service Worker da extensão. Verifique se a pasta 'dist' e o playwright.config.ts estão corretos. Erro: ${e.message}`);
+    }
 
-    // O Service Worker real em MV3 não tem uma página, 
-    // mas a maneira mais simples de obter o ID da extensão é via chrome://extensions.
-    // Uma forma mais robusta é tentar interagir com o popup.
+    if (!extensionId) {
+        throw new Error("ID da extensão não definido após a tentativa de carregamento.");
+    }
+    
+    // 3. Obtém a URL do popup com o ID
+    const popupUrl = `chrome-extension://${extensionId}/src/popup/popup.html`; // Caminho corrigido para MV3
 
-    // **Alternativa mais simples: Abrir o Popup**
-    const targets = await page.context().targets();
-    const extension = targets.find(target => 
-        target.url().startsWith('chrome-extension://') && target.type() === 'background_page'
-    );
-    // Em MV3, o service worker não tem uma URL de 'background_page' tradicional,
-    // mas a URL do popup é acessível via context/target.
+    // 4. Navega para a página do popup (simulando o clique no ícone)
+    const popupPage = await context.newPage(); 
+    // Aumenta o timeout para a navegação inicial
+    await popupPage.goto(popupUrl, { timeout: 60000 });
+    
+    // 5. Interage com os elementos do popup
+    const inputIntervalo = popupPage.locator('#intervalo');
+    const btnIniciar = popupPage.locator('#iniciar');
+    const statusDiv = popupPage.locator('#status');
 
-    // Tentativa simples:
-    await page.goto('chrome://extensions/');
-    const popupLink = await page.locator('extensions-item').filter({hasText: 'Lembrete de Água para Estudos'}).locator('#options-page');
-    const extensionId = (await popupLink.getAttribute('href')).split('/')[2];
-    
-    // URL do popup
-    return `chrome-extension://${extensionId}/src/popup/popup.html`;
-}
+    // Intervalo para o teste
+    const novoIntervalo = '10'; 
 
+    // 6. Define o novo intervalo e Inicia
+    await inputIntervalo.fill(novoIntervalo);
+    await btnIniciar.click();
+    // Remove o waitForTimeout desnecessário. O 'toHaveText' já espera a atualização do DOM.
 
-test('deve configurar o alarme com sucesso via popup', async ({ page }) => {
-    
-    // 1. Obtém a URL do popup
-    await page.goto('chrome://extensions/');
-    
-    // Localiza o item da extensão pelo nome (depende do idioma do Chrome)
-    const extensionItem = page.locator('extensions-item').filter({ hasText: 'Lembrete de Água para Estudos' });
-    
-    // Clica no link do popup (que geralmente é o título/nome da extensão em modo developer)
-    // O ID do popup é dinâmico, o jeito mais fácil é abrir uma nova página com a URL do popup
-    const popupUrl = await extensionItem.locator('#options-page').getAttribute('href');
-    
-    if (!popupUrl) {
-        throw new Error("Não foi possível encontrar a URL do popup. Verifique o seletor 'options-page'.");
-    }
-
-    const popupPage = await page.context().newPage();
-    await popupPage.goto(popupUrl);
-    
-    // 2. Interage com os elementos do popup
-    const inputIntervalo = popupPage.locator('#intervalo');
-    const btnIniciar = popupPage.locator('#iniciar');
-    const statusDiv = popupPage.locator('#status');
-
-    // Intervalo para o teste
-    const novoIntervalo = '10'; 
-
-    // 3. Define o novo intervalo e Inicia
-    await inputIntervalo.fill(novoIntervalo);
-    await btnIniciar.click();
-
-    // 4. Verifica o status no popup
-    await expect(statusDiv).toHaveText(`Ativo! Próximo lembrete em ${novoIntervalo} min.`);
-    await expect(btnIniciar).toBeDisabled();
-    
-    // 5. Validação extra: verifica se a configuração foi salva (recarga o popup)
-    await popupPage.reload();
-    await expect(inputIntervalo).toHaveValue(novoIntervalo);
-    await expect(statusDiv).toHaveText(`Ativo! Próximo lembrete em ${novoIntervalo} min.`);
-    
-    // 6. Para o alarme
-    const btnParar = popupPage.locator('#parar');
-    await btnParar.click();
-    
-    // 7. Verifica o status Parado
-    await expect(statusDiv).toHaveText('Parado');
-    await expect(btnParar).toBeDisabled();
-    await expect(btnIniciar).toBeEnabled();
-
-    await popupPage.close();
+    // 7. Verifica o status no popup (após iniciar)
+    // Usamos um timeout de 10 segundos para dar tempo do background.js e popup.js se comunicarem.
+    const activeStatusText = `Ativo! Próximo lembrete em ${novoIntervalo} min.`;
+    await expect(statusDiv).toHaveText(activeStatusText, { timeout: 10000 });
+    await expect(btnIniciar).toBeDisabled();
+    
+    // 8. Validação extra: verifica se a configuração foi salva (recarga o popup para testar chrome.storage.sync.get)
+    await popupPage.reload();
+    // Aguarda a UI re-renderizar com o status salvo
+    await expect(statusDiv).toHaveText(activeStatusText, { timeout: 10000 });
+    
+    await expect(inputIntervalo).toHaveValue(novoIntervalo);
+    
+    // 9. Para o alarme
+    const btnParar = popupPage.locator('#parar');
+    await btnParar.click();
+    // Remove o waitForTimeout desnecessário. O 'toHaveText' já espera a atualização do DOM.
+    
+    // 10. Verifica o status Parado
+    await expect(statusDiv).toHaveText('Parado');
+    await expect(btnParar).toBeDisabled();
+    await expect(btnIniciar).toBeEnabled();
 });
-
-// Este é um teste mais complexo que requer um contexto de extensão real
-// e a URL do service worker para inspecionar chrome.alarms.get.
-// O teste acima (interação com o popup) é suficiente para um E2E básico.

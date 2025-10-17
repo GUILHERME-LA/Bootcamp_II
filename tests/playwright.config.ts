@@ -1,37 +1,49 @@
-import { defineConfig, devices } from '@playwright/test';
-import path from 'node:path';
+import { defineConfig } from '@playwright/test';
+import * as path from 'path';
 
-// O caminho para a pasta 'dist' que contém a extensão
-const distPath = path.join(process.cwd(), 'dist');
+// O diretório 'dist' é criado pelo comando 'npm run build' e contém o manifest.json, etc.
+const pathToExtension = path.join(__dirname, 'dist');
 
 export default defineConfig({
-  testDir: __dirname,
-  // Usa o reporter list e html para o relatório
-  reporter: [['list'], ['html', { outputFolder: 'playwright-report' }]],
-  use: {
-    // Deve ser falso para interagir com o popup em algumas abordagens,
-    // mas o Playwright pode lidar com o contexto de extensão em headless.
-    // Usaremos a abordagem de contexto persistente para E2E.
-    headless: true, 
-    // Garante que o teste não falhe apenas por um timeout alto
-    actionTimeout: 15000, 
-    navigationTimeout: 30000,
+  // Aumenta o timeout global para 60 segundos, o dobro do padrão (30s).
+  // Isso resolve o erro 'Test timeout of 30000ms exceeded while setting up "page"' no Docker/CI.
+  timeout: 60000, 
+  
+  // Timeout de 60 segundos para 'expect's (assercões)
+  expect: {
+    timeout: 60000,
   },
+
+  testDir: './tests',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : undefined,
+  reporter: 'html',
+
+  use: {
+    // Modo headless desabilitado (headless: false) é fundamental para depuração visual.
+    headless: false,
+    
+    // Configuração base do Playwright
+    trace: 'on-first-retry',
+    
+    // Configurações do Chromium para carregar a extensão
+    contextOptions: {
+      args: [
+        `--disable-extensions-except=${pathToExtension}`,
+        `--load-extension=${pathToExtension}`,
+      ],
+    },
+  },
+
   projects: [
     {
-      name: 'chromium-with-extension',
-      use: {
-        ...devices['Desktop Chrome'],
-        // Argumentos essenciais para carregar a extensão
-        launchOptions: {
-          args: [
-            `--disable-extensions-except=${distPath}`,
-            `--load-extension=${distPath}`
-          ]
-        },
-        // O baseURL é necessário apenas se os testes acessarem URLs fixas
-        // baseURL: 'http://localhost:3000', 
-      }
-    }
-  ]
+      name: 'chromium-extension',
+      use: { 
+        ...process.env.CI ? {} : { launchOptions: { devtools: true } },
+        browserName: 'chromium' 
+      },
+    },
+  ],
 });

@@ -3,33 +3,33 @@ import path from 'node:path';
 import archiver from 'archiver';
 
 const dist = 'dist';
-const src = 'src';
 
 // 1. Limpa e recria o diretório dist
+// Apenas cria a pasta dist e a pasta icons, nada de pastas aninhadas 'src'
 fs.rmSync(dist, { recursive: true, force: true });
 fs.mkdirSync(dist);
-fs.mkdirSync(path.join(dist, src));
-fs.mkdirSync(path.join(dist, src, 'popup'));
-fs.mkdirSync(path.join(dist, src, 'background'));
 fs.mkdirSync(path.join(dist, 'icons'));
 
 
 // 2. Copia arquivos essenciais para dist/
 try {
-  // Arquivos na raiz
-  for (const f of ['manifest.json']) {
-    fs.copyFileSync(f, path.join(dist, f));
-  }
+  // Arquivos da Raiz
+  fs.copyFileSync('manifest.json', path.join(dist, 'manifest.json'));
   
-  // Arquivos de código/UI
-  fs.cpSync(path.join(src, 'popup'), path.join(dist, src, 'popup'), { recursive: true });
-  fs.cpSync(path.join(src, 'background'), path.join(dist, src, 'background'), { recursive: true });
-  
-  // Ícones (assumindo que estão na raiz)
+  // Ícones
+  // Assumindo que a pasta 'icons' está na raiz do projeto.
   fs.cpSync('icons', path.join(dist, 'icons'), { recursive: true });
   
+  // Arquivos do Popup (copiados DIRETAMENTE para a raiz de 'dist')
+  fs.copyFileSync('src/popup/popup.html', path.join(dist, 'popup.html'));
+  fs.copyFileSync('src/popup/popup.css', path.join(dist, 'popup.css'));
+  fs.copyFileSync('src/popup/popup.js', path.join(dist, 'popup.js'));
+  
+  // Arquivo do Service Worker (copiado DIRETAMENTE para a raiz de 'dist')
+  fs.copyFileSync('src/background/background.js', path.join(dist, 'background.js'));
+  
 } catch (error) {
-  console.error('Erro ao copiar arquivos para dist:', error);
+  console.error('Erro ao copiar arquivos para dist. Verifique se os arquivos de origem (manifest.json, icons/, src/popup/, src/background/) existem:', error);
   process.exit(1);
 }
 

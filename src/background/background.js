@@ -1,60 +1,87 @@
-const DEFAULT_INTERVAL = 30; // Minutos padrão para quando a extensão é instalada pela primeira vez
+// Configurações padrão
+const DEFAULT_INTERVAL = 30; // Minutos padrão
+const ALARM_NAME = 'lembreteAgua';
 
-// Função para enviar notificação
+// Função para enviar notificação (chamada quando o alarme dispara)
 function enviarNotificacao() {
-  chrome.notifications.create({
+  chrome.notifications.create('lembreteAguaNotificacao', {
     type: 'basic',
-    // Caminho absoluto corrigido (começa na raiz da extensão)
-    iconUrl: '/icons/icon48.png', 
+    iconUrl: 'icons/icon48.png', 
     title: 'Hora de Beber Água! 💧',
     message: 'Não esqueça de se hidratar durante os estudos. Beba um copo agora!'
   });
 }
 
 // Configura o alarme recorrente
-function configurarAlarme(intervaloMinutos) {
+async function configurarAlarme(intervaloMinutos) {
+  // Salva o intervalo no storage
+  await chrome.storage.sync.set({ intervalo: intervaloMinutos });
+  
   // Cancela alarmes antigos
-  chrome.alarms.clear('lembreteAgua');
-
-  // Cria novo alarme a cada X minutos
-  chrome.alarms.create('lembreteAgua', {
-    delayInMinutes: intervaloMinutos,
+  await chrome.alarms.clear(ALARM_NAME);
+  
+  // Cria novo alarme. O delayInMinutes inicia o primeiro alarme após o intervalo.
+  chrome.alarms.create(ALARM_NAME, {
+    delayInMinutes: 1, // Inicia em 1 minuto para testes, depois repete no intervalo
     periodInMinutes: intervaloMinutos
   });
-
-  console.log(`Alarme configurado para a cada ${intervaloMinutos} minutos.`);
 }
 
-// Quando o alarme dispara
+// Para o alarme
+async function pararAlarme() {
+  // Limpa o alarme (essencial para o status 'Parado')
+  await chrome.alarms.clear(ALARM_NAME);
+  // Define o intervalo como 0 para indicar que está parado, mesmo que o alarme tenha sido limpo
+  await chrome.storage.sync.set({ intervalo: 0 }); 
+}
+
+// Listener para Alarme (Dispara a notificação)
 chrome.alarms.onAlarm.addListener((alarme) => {
-  if (alarme.name === 'lembreteAgua') {
+  if (alarme.name === ALARM_NAME) {
     enviarNotificacao();
   }
 });
 
-// Inicializa ao carregar a extensão (garante que o alarme é restaurado ao reiniciar o Chrome)
-chrome.runtime.onStartup.addListener(() => {
-  chrome.storage.sync.get(['intervalo'], (resultado) => {
-    // Usa o valor salvo ou o padrão se for a primeira vez
-    const intervalo = resultado.intervalo || DEFAULT_INTERVAL; 
-    configurarAlarme(intervalo);
-  });
+// Listener para Mensagens (CRUCIAL para a comunicação com popup.js e os testes)
+// DEVE ser assíncrono para garantir que sendResponse seja chamado DEPOIS de storage/alarms.
+chrome.runtime.onMessage.addListener((mensagem, sender, sendResponse) => {
+    // Flag para indicar que a resposta será enviada de forma assíncrona.
+    const isAsync = true; 
+
+    (async () => {
+        if (mensagem.acao === 'configurarAlarme' && mensagem.intervalo) {
+            try {
+                await configurarAlarme(mensagem.intervalo);
+                sendResponse({ status: 'sucesso' });
+            } catch (error) {
+                console.error("Erro ao configurar alarme no Service Worker:", error);
+                sendResponse({ status: 'erro', mensagem: 'Falha ao configurar alarme' });
+            }
+        } else if (mensagem.acao === 'pararAlarme') {
+            try {
+                await pararAlarme();
+                sendResponse({ status: 'sucesso' });
+            } catch (error) {
+                 console.error("Erro ao parar alarme no Service Worker:", error);
+                 sendResponse({ status: 'erro', mensagem: 'Falha ao parar alarme' });
+            }
+        } else {
+             sendResponse({ status: 'erro', mensagem: 'Ação desconhecida' });
+        }
+    })();
+
+    // Retorna true para indicar que sendResponse será chamada depois que a função async() terminar.
+    return isAsync; 
 });
 
-// Escuta MENSAGENS do popup para INICIAR ou PARAR (ÚNICO LISTENER)
-chrome.runtime.onMessage.addListener((mensagem, sender, sendResponse) => {
-  // 1. AÇÃO INICIAR
-  if (mensagem.acao === 'configurarAlarme') {
-    configurarAlarme(mensagem.intervalo);
-    chrome.storage.sync.set({ intervalo: mensagem.intervalo });
-    sendResponse({ status: 'sucesso' });
-    return true; 
-  }
-  
-  // 2. AÇÃO PARAR
-  if (mensagem.acao === 'pararAlarme') {
-    chrome.alarms.clear('lembreteAgua');
-    sendResponse({ status: 'parado' });
-    return true; 
-  }
+// Listener de Instalação (Configuração inicial)
+chrome.runtime.onInstalled.addListener(() => {
+    chrome.storage.sync.get(['intervalo'], (resultado) => {
+        const intervalo = resultado.intervalo || DEFAULT_INTERVAL;
+        // Se o intervalo não estava salvo, salva o padrão (30 min)
+        if (!resultado.intervalo) {
+            chrome.storage.sync.set({ intervalo: intervalo });
+        }
+        // Não iniciamos o alarme aqui, apenas configuramos o valor padrão no storage.
+    });
 });
