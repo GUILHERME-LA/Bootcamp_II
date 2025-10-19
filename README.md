@@ -50,7 +50,7 @@ O *workflow* do GitHub Actions automatiza o *build* e os testes em cada `push` p
 
 O CI garante que os **Artefatos** sejam publicados: o `playwright-report` e o `extension.zip`.
 
-**Link do Workflow (Exemplo):**
+**Link do Workflow:**
 *(https://github.com/GUILHERME-LA/Bootcamp_II/actions/runs/18631385194/job/53116550265)*
 
 ---
