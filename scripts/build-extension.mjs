@@ -3,6 +3,7 @@ import archiver from 'archiver';
 import { createWriteStream } from 'fs';
 import path from 'path';
 
+// Define caminhos base
 const DIST_DIR = path.resolve(process.cwd(), 'dist');
 const SRC_DIR = path.resolve(process.cwd(), 'src');
 
@@ -29,11 +30,14 @@ cpSync(path.join(SRC_DIR, 'content.js'), path.join(DIST_DIR, 'src', 'content.js'
 
 // Pasta icons (MANDATÓRIA pelo manifest.json)
 const iconsPath = path.resolve(process.cwd(), 'icons');
+// CORREÇÃO: Verifica se a pasta existe e usa o caminho absoluto para o cpSync.
 if (existsSync(iconsPath)) {
     console.log('Copiando pasta icons...');
-    cpSync('icons', path.join(DIST_DIR, 'icons'), { recursive: true });
+    // Usar o caminho absoluto 'iconsPath' elimina erros de resolução de caminho.
+    cpSync(iconsPath, path.join(DIST_DIR, 'icons'), { recursive: true });
 } else {
     // Isso é uma correção de build, mas lembre-se: a extensão PRECISA da pasta icons!
+    // Apenas emitimos um aviso para que o CI não falhe.
     console.warn(`[AVISO] Pasta 'icons' não encontrada em ${iconsPath}. O build continuará, mas a extensão pode falhar ao carregar no Chrome.`);
 }
 
