@@ -47,11 +47,4 @@ jobs:
           name: extension-zip
           path: dist/extension.zip
 
-      - name: Criar Release e Anexar ZIP (Opcional - Implementação de Release Automática)
-        # Adiciona o zip como anexo à Release, caso haja um tag push
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/extension.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+     
