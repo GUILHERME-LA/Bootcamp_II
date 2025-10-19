@@ -1,58 +1,61 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import { mkdirSync, cpSync, rmSync, existsSync } from 'fs';
 import archiver from 'archiver';
+import { createWriteStream } from 'fs';
+import path from 'path';
 
-const dist = 'dist';
-const src = 'src';
+const DIST_DIR = path.resolve(process.cwd(), 'dist');
+const SRC_DIR = path.resolve(process.cwd(), 'src');
 
-// 1. Limpa e recria o diretório dist
-fs.rmSync(dist, { recursive: true, force: true });
-fs.mkdirSync(dist);
-fs.mkdirSync(path.join(dist, src));
-fs.mkdirSync(path.join(dist, src, 'popup'));
-fs.mkdirSync(path.join(dist, src, 'background'));
-fs.mkdirSync(path.join(dist, 'icons'));
+// 1. Limpa o diretório de distribuição anterior
+console.log('Limpando diretório anterior...');
+rmSync(DIST_DIR, { recursive: true, force: true });
+
+// 2. Cria o diretório de distribuição
+mkdirSync(DIST_DIR);
+console.log(`Diretório ${DIST_DIR} criado com sucesso.`);
+
+// 3. Copia arquivos estáticos e obrigatórios
+
+// Arquivos na raiz
+cpSync('manifest.json', path.join(DIST_DIR, 'manifest.json'));
+cpSync('README.md', path.join(DIST_DIR, 'README.md'));
+
+// Pasta src
+mkdirSync(path.join(DIST_DIR, 'src'));
+cpSync(path.join(SRC_DIR, 'background'), path.join(DIST_DIR, 'src', 'background'), { recursive: true });
+cpSync(path.join(SRC_DIR, 'popup'), path.join(DIST_DIR, 'src', 'popup'), { recursive: true });
+cpSync(path.join(SRC_DIR, 'content.js'), path.join(DIST_DIR, 'src', 'content.js'));
 
 
-// 2. Copia arquivos essenciais para dist/
-try {
-  // Arquivos na raiz
-  for (const f of ['manifest.json']) {
-    fs.copyFileSync(f, path.join(dist, f));
-  }
-  
-  // Arquivos de código/UI
-  fs.cpSync(path.join(src, 'popup'), path.join(dist, src, 'popup'), { recursive: true });
-  fs.cpSync(path.join(src, 'background'), path.join(dist, src, 'background'), { recursive: true });
-  
-  // Ícones (assumindo que estão na raiz)
-  fs.cpSync('icons', path.join(dist, 'icons'), { recursive: true });
-  
-} catch (error) {
-  console.error('Erro ao copiar arquivos para dist:', error);
-  process.exit(1);
+// Pasta icons (MANDATÓRIA pelo manifest.json)
+const iconsPath = path.resolve(process.cwd(), 'icons');
+if (existsSync(iconsPath)) {
+    console.log('Copiando pasta icons...');
+    cpSync('icons', path.join(DIST_DIR, 'icons'), { recursive: true });
+} else {
+    // Isso é uma correção de build, mas lembre-se: a extensão PRECISA da pasta icons!
+    console.warn(`[AVISO] Pasta 'icons' não encontrada em ${iconsPath}. O build continuará, mas a extensão pode falhar ao carregar no Chrome.`);
 }
 
-// 3. Gera ZIP
-const output = fs.createWriteStream(path.join(dist, 'extension.zip'));
-const archive = archiver('zip', { zlib: { level: 9 } });
 
-archive.on('warning', function(err) {
-  if (err.code === 'ENOENT') {
-    console.warn(err);
-  } else {
-    throw err;
-  }
+// 4. Cria o arquivo ZIP da extensão
+const output = createWriteStream(path.join(DIST_DIR, 'extension.zip'));
+const archive = archiver('zip', {
+    zlib: { level: 9 } // Melhor compressão
+});
+
+output.on('close', function() {
+    console.log(`\nExtensão ZIP criada com sucesso.`);
+    console.log(`Tamanho total: ${(archive.pointer() / 1024 / 1024).toFixed(2)} MB`);
 });
 
 archive.on('error', function(err) {
-  throw err;
+    throw err;
 });
 
 archive.pipe(output);
 
-// Adiciona o conteúdo do dist para o ZIP (sem a pasta dist em si)
-archive.directory(dist, false);
+// Adiciona todos os arquivos do diretório 'dist' ao ZIP
+archive.directory(DIST_DIR, false);
 
-await archive.finalize();
-console.log(`Build gerado em ${dist}/ e ${dist}/extension.zip`);
+archive.finalize();
